@@ -75,6 +75,17 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
 COPY ../${REPOS_LIST} /root/${ROS_WS}/
 RUN vcs import ${ROS_WS}/src < /root/${ROS_WS}/${REPOS_LIST}
 
+# Intel Realsense setup
+RUN apt remove -y ros-jazzy-librealsense2 && apt autoremove -y && \
+    cd ~ && mkdir src && cd src && \
+    git clone https://github.com/IntelRealSense/librealsense.git && \
+    cd librealsense && \    
+    mkdir build && \
+    cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_NETWORK_DEVICE=OFF -DBUILD_WITH_TM2=OFF && \
+    make -j$(nproc) && \
+    make install
+
 # rosdep
 RUN apt-get update && rosdep fix-permissions
 RUN rosdep update
@@ -109,17 +120,6 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-ros2-control \
     ros-$ROS_DISTRO-ros2-controllers \
     ros-$ROS_DISTRO-joint-state-publisher-gui
-
-# Intel Realsense setup
-RUN apt remove -y ros-jazzy-librealsense2 && apt autoremove -y && \
-    cd ~ && mkdir src && cd src && \
-    git clone https://github.com/IntelRealSense/librealsense.git && \
-    cd librealsense && \    
-    mkdir build && \
-    cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_NETWORK_DEVICE=OFF -DBUILD_WITH_TM2=OFF && \
-    make -j$(nproc) && \
-    make install
 
 # Copy full workspace
 COPY --from=builder ${ROS_WS} ${ROS_WS}
