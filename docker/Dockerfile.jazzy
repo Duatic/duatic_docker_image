@@ -128,10 +128,6 @@ RUN apt remove -y ros-jazzy-librealsense2 && apt autoremove -y && \
 # Copy full workspace
 COPY --from=builder ${ROS_WS} ${ROS_WS}
 
-# Ignore selected packages
-RUN touch ${ROS_WS}/src/cartesian_controllers/cartesian_controller_simulation/COLCON_IGNORE && \
-    touch ${ROS_WS}/src/cartesian_controllers/cartesian_controller_tests/COLCON_IGNORE
-
 WORKDIR ${ROS_WS}
 
 # rosdep
