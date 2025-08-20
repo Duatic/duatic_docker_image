@@ -35,6 +35,10 @@ repositories:
     type: git
     url: https://github.com/Duatic/dynaarm_driver.git
     version: main
+  dynadrive_driver:
+    type: git
+    url:   https://github.com/Duatic/dynadrive_driver.git
+    version: main
   dynaarm_demo:
     type: git
     url: https://github.com/Duatic/dynaarm_demo.git
@@ -42,11 +46,11 @@ repositories:
   dynaarm_gamepad_interface:
     type: git
     url: https://github.com/Duatic/dynaarm_gamepad_interface.git
-    version: main
-  cartesian_controllers:
+    version: main  
+  duatic_ros2_config:
     type: git
-    url: https://github.com/fzi-forschungszentrum-informatik/cartesian_controllers.git
-    version: ros2
+    url: https://github.com/Duatic/duatic_ros2_config.git
+    version: main
   zimmer_gripper_description:
     type: git
     url: https://github.com/Duatic/zimmer_gripper_description.git
