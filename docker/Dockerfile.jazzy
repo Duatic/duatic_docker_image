@@ -75,10 +75,6 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
 COPY ../${REPOS_LIST} /root/${ROS_WS}/
 RUN vcs import ${ROS_WS}/src < /root/${ROS_WS}/${REPOS_LIST}
 
-# Ignore selected packages
-RUN touch ${ROS_WS}/src/cartesian_controllers/cartesian_controller_simulation/COLCON_IGNORE && \
-    touch ${ROS_WS}/src/cartesian_controllers/cartesian_controller_tests/COLCON_IGNORE
-
 # rosdep
 RUN apt-get update && rosdep fix-permissions
 RUN rosdep update
