@@ -55,8 +55,3 @@ repositories:
     type: git
     url: https://github.com/Duatic/zimmer_gripper_description.git
     version: main
-  realsense-ros:
-    type: git
-    url: https://github.com/IntelRealSense/realsense-ros.git
-    version: ros2-master
-  

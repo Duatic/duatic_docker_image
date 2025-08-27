@@ -3,3 +3,4 @@ install/
 log/
 **/.env
 .vscode/settings.json
+token.txt

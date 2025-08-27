@@ -1,132 +1,93 @@
-# syntax=docker/dockerfile:1.4
-
 ############################
-# Stage 1: Build
+# Build Stage
 ############################
-FROM docker.io/osrf/ros:jazzy-desktop-full as builder
+FROM docker.io/osrf/ros:jazzy-desktop-full AS builder
 
 ENV SHELL=/bin/bash
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV TZ="Europe/Berlin"
+
+# Setup the ROS 2 workspace dir
 ENV ROS_WS=/ros2_ws
-ENV REPOS_LIST=repos.list
-
-# Create workspace
 RUN mkdir -p ${ROS_WS}/src
-WORKDIR ${ROS_WS}
 
-# Install dependencies
-RUN apt-get update && \
-    apt-get -y upgrade && \
-    apt-get install -y \    
+# Base build dependencies (no upgrade, no recommends, cleaned afterwards)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    wget \
-    apt-transport-https \
-    unzip \
-    gpg \    
-    black \
     ccache \
-    clang-format \
-    clang-format-14 \
     python3-pip \
     python3-vcstool \
-    python3-colcon-common-extensions \ 
-    python3-colcon-mixin \ 
-    python3-pandas \ 
-    pipx \
-    gdb \
-    xterm \
-    x11-apps \
+    python3-colcon-common-extensions \
+    python3-colcon-mixin \
     ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
-    ros-$ROS_DISTRO-rqt-runtime-monitor \
-    ros-$ROS_DISTRO-rqt-robot-monitor \
-    ros-$ROS_DISTRO-plotjuggler \
-    ros-$ROS_DISTRO-plotjuggler-ros \
-    ros-$ROS_DISTRO-ros2controlcli \
-    ros-$ROS_DISTRO-joy \    
-    ros-$ROS_DISTRO-rosbridge-suite \
-    ros-$ROS_DISTRO-pick-ik \
-    ros-$ROS_DISTRO-realsense2* && \
-    pip install pre-commit --break-system-packages
+    && rm -rf /var/lib/apt/lists/*
 
-# colcon mixin setup
-COPY scripts/colcon_mixin.sh /root/
-RUN sed -i 's/\r$//' /root/colcon_mixin.sh && chmod +x /root/colcon_mixin.sh
-RUN bash /root/colcon_mixin.sh && colcon mixin update default
-
-RUN --mount=type=secret,id=GIT_AUTH_TOKEN \        
-    GIT_AUTH_TOKEN=$(cat /run/secrets/GIT_AUTH_TOKEN) && \
-    git config --global credential.helper store && \
-    echo "https://${GIT_AUTH_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-
-# Clone repos
-COPY ../${REPOS_LIST} /root/${ROS_WS}/
-RUN vcs import ${ROS_WS}/src < /root/${ROS_WS}/${REPOS_LIST}
-
-# rosdep
-RUN apt-get update && \
+# Add colcon mixin script
+COPY config/colcon_mixin.sh /root/
+RUN sed -i 's/\r$//' /root/colcon_mixin.sh && \
+    chmod +x /root/colcon_mixin.sh && \
     bash /root/colcon_mixin.sh && \
-    colcon mixin update default && \
+    colcon mixin update default
+
+# Copy only repos list early for caching
+COPY repos.list /root/repos.list
+
+# Import repositories (private token secret used only in this layer). The secret file may contain either the raw token
+# or a line like GIT_AUTH_TOKEN=tokenvalue; both are supported. Token is not persisted in final layer.
+RUN --mount=type=secret,id=GIT_AUTH_TOKEN,required \
+        bash -c 'set -euo pipefail; RAW=$(cat /run/secrets/GIT_AUTH_TOKEN); TOKEN=${RAW#GIT_AUTH_TOKEN=}; \
+            if [ -z "$TOKEN" ]; then echo "Empty GIT auth token" >&2; exit 1; fi; \
+            git config --global url."https://${TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"; \
+            export GIT_TERMINAL_PROMPT=0; \
+            vcs import ${ROS_WS}/src < /root/repos.list --skip-existing; \
+            # Remove token-containing section again so it does not persist in the committed layer
+            git config --global --remove-section url."https://${TOKEN}:x-oauth-basic@github.com/" 2>/dev/null || true'
+
+WORKDIR ${ROS_WS}
+# Resolve and install system dependencies via rosdep
+RUN apt update && \    
     rosdep update && \
-    rosdep install -r --from-paths src --ignore-src --rosdistro $ROS_DISTRO --skip-keys=librealsense2 -y
+    rosdep install -r --from-paths src --ignore-src --rosdistro $ROS_DISTRO -y || true
 
-# Intel Realsense setup
-RUN apt remove -y ros-jazzy-librealsense2 && apt autoremove -y && \
-    cd ~ && mkdir src && cd src && \
-    git clone https://github.com/IntelRealSense/librealsense.git && \
-    cd librealsense && \    
-    mkdir build && \
-    cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_NETWORK_DEVICE=OFF -DBUILD_WITH_TM2=OFF && \
-    make -j$(nproc) && \
-    make install
-
-# Build
-RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
+RUN . /opt/ros/$ROS_DISTRO/setup.sh && \    
     export CMAKE_PREFIX_PATH=/usr/local:$CMAKE_PREFIX_PATH && \
-    colcon build --symlink-install --continue-on-error
+    colcon build --continue-on-error --mixin release ccache
 
 ############################
-# Stage 2: Runtime
+# Runtime / Dev Stage
 ############################
-FROM docker.io/osrf/ros:jazzy-desktop-full
+FROM docker.io/osrf/ros:jazzy-desktop-full AS runtime
 
-ENV SHELL=/bin/bash
-ENV TZ="Europe/Berlin"
-ENV ROS_WS=/ros2_ws
+ARG DEBIAN_FRONTEND=noninteractive
+ENV SHELL=/bin/bash \
+    TZ=Europe/Berlin \
+    ROS_WS=/ros2_ws
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
-    ros-$ROS_DISTRO-ros2controlcli \
-    ros-$ROS_DISTRO-joy \
-    ros-$ROS_DISTRO-rosbridge-suite \
-    ros-$ROS_DISTRO-moveit \
-    ros-$ROS_DISTRO-ros2-control \
-    ros-$ROS_DISTRO-ros2-controllers \
-    ros-$ROS_DISTRO-joint-state-publisher-gui
+WORKDIR ${ROS_WS}
 
 RUN git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it && \
     bash ~/.bash_it/install.sh
 
-# Copy full workspace
+# Runtime-specific packages only
+RUN apt update && apt install -y --no-install-recommends \
+    ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder ${ROS_WS} ${ROS_WS}
 
-# Copy a bit of config
+# Config and entrypoint assets
 COPY config/ /root/
-RUN touch /root/.bash_history && \
-    find /root/ -type f -exec sed -i 's/\r$//' {} +
+RUN find /root/ -type f -exec sed -i 's/\r$//' {} + && \
+    mkdir -p /root/.cache/history && touch /root/.cache/history/history.log && \
+    ln -sf /root/.cache/history/history.log /root/.bash_history && \
+    chmod +x /root/ros_entrypoint.sh
 
-WORKDIR ${ROS_WS}
-
-# Rosdep
 RUN apt update && \
     rosdep update && \
-    rosdep install -r --from-paths src --ignore-src --rosdistro $ROS_DISTRO --skip-keys=librealsense2 -y && \
+    rosdep install -r --from-paths src --ignore-src --rosdistro $ROS_DISTRO -y && \
     apt -y clean
 
-RUN mkdir -p /root/.cache/history && \
-    touch /root/.cache/history/history.log && \
-    ln -sf /root/.cache/history/history.log /root/.bash_history
+ENTRYPOINT ["/root/ros_entrypoint.sh"]
+CMD ["bash"]
 
-ENTRYPOINT [ "/bin/bash" ]
+# - Build with: docker build --secret id=GIT_AUTH_TOKEN,src=./token.txt -f docker/Dockerfile.jazzy .
