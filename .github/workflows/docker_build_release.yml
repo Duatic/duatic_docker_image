@@ -43,7 +43,7 @@ jobs:
         id: set_version
         run: |
           version_txt="${{ env.VERSION_TXT }}"
-          latest_release="${LATEST_RELEASE_TAG#v}"  # strip leading "v" safely
+          latest_release="${LATEST_RELEASE_TAG#v}"  # strip leading "v"
 
           echo "version.txt = $version_txt"
           echo "latest release = $latest_release"
@@ -72,17 +72,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push multi-arch Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile.jazzy
           push: true
+          platforms: linux/amd64,linux/arm64
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.FINAL_VERSION }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
