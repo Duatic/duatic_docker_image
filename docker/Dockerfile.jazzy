@@ -1,7 +1,7 @@
 ############################
 # Build Stage
 ############################
-FROM docker.io/osrf/ros:jazzy-desktop-full AS builder
+FROM ghcr.io/duatic/duatic_ros2_docker_images:latest AS builder
 
 ENV SHELL=/bin/bash
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
@@ -56,7 +56,7 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 ############################
 # Runtime / Dev Stage
 ############################
-FROM docker.io/osrf/ros:jazzy-desktop-full AS runtime
+FROM ghcr.io/duatic/jazzy-desktop-full_docker_image:latest AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV SHELL=/bin/bash \
